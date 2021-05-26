@@ -4,7 +4,6 @@ Structure eparams: Type := {
  E:> Set;                      (* the vector type *)
  stype:> fparams;              (* the scalar field *)
  E0: E;                        (* 0 *)
- eqE: E -> E -> bool;          (* = as a boolean function *)
  addE : E -> E -> E;          (* + *)
  scalE : (K stype) -> E -> E   (* scalar *)
 }.
@@ -12,7 +11,6 @@ Structure eparams: Type := {
 Declare Scope vector_scope.
 Delimit Scope vector_scope with v.
 
-Notation "x ?= y" := (eqE _ x y) (at level 70): vector_scope.
 Notation "0" := (E0 _): vector_scope.
 Notation "x + y" := (addE _ x y): vector_scope.
 Notation "x .* y" := (scalE _ x%f y) (at level 31, no associativity): vector_scope.
@@ -64,7 +62,7 @@ Definition is_base vs := free vs /\ forall e, cbl vs e.
 
 Structure vparamsProp: Type := {
  sProp : fparamsProp p;
- eqE_dec: forall x y, if x ?= y then x = y else x <> y;        
+ eqE_dec: forall x y, (x = y) \/ x <> y;        
           (* Boolean equality *)
  addE_assoc: forall x y z, (x + y) + z = x + (y + z);
           (* Associativity for + *)
@@ -85,11 +83,6 @@ Structure vparamsProp: Type := {
 }.
 
 Variable Hp: vparamsProp.
-
-Lemma eqE_refl x: (x ?= x) = true.
-Proof.
-generalize (eqE_dec Hp x x); case eqE; auto.
-Qed.
 
 Lemma addE0r: forall x, x + 0 = x.
 Proof.
@@ -184,11 +177,6 @@ induction ks1 as [| k ks1 IH]; intros ks2 [| v vs1] vs2 H;
 simpl mprod; unfold mprod; simpl; rewrite addE0l; auto.
 simpl app; rewrite mprod_S; rewrite mprod_S; rewrite IH; auto; 
   rewrite addE_assoc; auto.
-Qed.
-
-Lemma eqE_spec x y : eq_Spec x y (x ?= y).
-Proof.
-generalize (eqE_dec Hp x y); case eqE; constructor; auto.
 Qed.
 
 (* Lemmas for free *)
@@ -436,16 +424,16 @@ rewrite oppKr; auto.
 rewrite scalE0l; auto.
 Qed.
 
-Lemma scalE_integral k x : k .* x = 0 -> {k = 0%f} + {x = 0}.
+Lemma scalE_integral k x : k .* x = 0 -> (k = 0%f) \/ (x = 0).
 Proof.
 intros Hk.
-generalize (eqK_dec _ sfP k 0%f); case eqK; auto; intros Hk1.
+case (eqK_dec _ sfP k 0%f); auto; intros Hk1.
 right.
 rewrite <-(scalE1 Hp x).
 simpl; rewrite <-(invKr _ sfP _ Hk1).
 rewrite scal_multE; auto.
 rewrite Hk; rewrite scalE0r; auto.
-Defined.
+Qed.
 
 Lemma scalE_opp k1 k2 x : k1 .* ((- (k2)) .* x) = (-k1).* (k2 .* x).
 Proof.

@@ -24,15 +24,19 @@ Fixpoint kn (n: nat): Set :=
 (** We first build the functions of the vector space *)
 
 (* Equality of two vectors as list *)
-Fixpoint eq (n : nat) : kn n -> kn n -> bool :=
-  match n return (kn n -> kn n -> bool) with
-  | 0%nat => fun a b => true
-  | S n1 =>
-      fun l1 l2 =>
-      let (v1, l3) := l1 in
-      let (v2, l4) := l2 in 
-      if (v1 ?= v2)%f then eq n1 l3 l4 else false
-  end.
+Lemma eqkn_dec (n : nat) (k1 k2 : kn n) : (k1 = k2) \/ (k1 <> k2).
+Proof.
+induction n as [|n IH].
+  now left; case k1; case k2.
+destruct k1 as [v1 l3].
+destruct k2 as [v2 l4].
+case (eqK_dec _ Hp v1 v2); intro H1.
+  case (IH l3 l4); intro H2.
+    now left; apply f_equal2.
+  now right; contradict H2; inversion H2.
+now right; contradict H1; inversion H1.
+Qed.
+    
 
 (* Generate the constant k for the dimension n *)
 Fixpoint genk (n: nat) (k: K) {struct n}: (kn n) :=
@@ -61,19 +65,12 @@ Fixpoint scal (n : nat) (k: K) {struct n}: kn n -> kn n :=
   end.
 
 Canonical Structure vn_eparams (n: nat) :=
-  Build_eparams (kn n) K (genk n 0%f) (eq n) (add n) (scal n).
+  Build_eparams (kn n) K (genk n 0%f) (add n) (scal n).
 
 Definition fn n : vparamsProp (vn_eparams n).
 apply Build_vparamsProp; auto.
 (* eq Dec *)
-induction n as [| n IH]; simpl.
-  intros [] []; auto.
-intros (v1,l1) (v2, l2); 
-  generalize (eqK_dec _ Hp v1 v2); case eqK; intros HH; subst.
-  generalize (IH l1 l2); unfold eqE; simpl.
-case eq; intros HH; subst; auto.
-  intros HH1; injection HH1; intros; case HH; auto.
-intros HH1; injection HH1; intros; case HH; auto.
+apply eqkn_dec.
 (* assoc *)
 induction n as [| n IH]; simpl; auto.
 intros (v1,l3) (v2, l4) (v3, l5); simpl in IH; 
@@ -128,15 +125,7 @@ simpl; intros HH; injection HH; auto.
 Qed.
 
 Lemma genk0_dec n (x: kn n) :  x = 0 \/ x <> 0.
-Proof.
-induction n as [| n IH]; simpl; auto.
-destruct x; auto.
-destruct x as (x1, x2).
-case (IH x2); intros H1; subst; auto.
-generalize (eqK_dec _ Hp x1 0%f); case eqK;intros H1; subst; auto.
-right; intro HH; case H1; injection HH; auto.
-right; intro HH; case H1; injection HH; auto.
-Qed.
+Proof. exact (eqkn_dec _ x 0). Qed.
 
 (* Conversion from list to kn *)
 Fixpoint l2kn (n:nat) (l:list K) {struct l} : kn n:=
@@ -501,7 +490,6 @@ Qed.
 (* Our final vector *)
 Definition Kn := kn p.
 Definition K0 := genk p 0%f.
-Definition Keq: Kn -> Kn -> bool := eq p.
 Definition Kadd: Kn -> Kn -> Kn := add p.
 Definition Kscal: K -> Kn -> Kn := scal p.
 Definition Kproj: nat -> Kn -> K := proj p.
@@ -509,7 +497,7 @@ Definition Ksprod: Kn -> Kn -> K := pscal p.
 Definition Kgen := gen p.
 
 Canonical Structure v_eparams :=
-  Build_eparams Kn K K0 Keq Kadd Kscal.
+  Build_eparams Kn K K0 Kadd Kscal.
 Definition f : vparamsProp v_eparams := fn p.
 
 (* Prod of two vectors as list *)

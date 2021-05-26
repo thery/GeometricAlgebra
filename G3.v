@@ -36,8 +36,6 @@ Definition Vmeet (x y : vect): vect := Vmeet Pp x y.
 Notation "x '∧' y" := (Vmeet x y) (at level 45, left associativity).
 Definition Vdual (x : vect): vect := Vdual Pp x.
 Notation "'@  x" := (Vdual x) (at level 9).
-Definition Veq (x y : vect): bool := Veq Pp x y.
-Notation "x ?= y" := (Veq x y).
 Definition Vgenk (k : F): vect := (Vgenk Pp k).
 Notation "0" := (Vgenk 0%f).
 Notation "1" := (Vgenk 1%f).
@@ -54,7 +52,7 @@ Proof. apply (scalE0l _ (fn _ HP 3)). Qed.
 Let scal1l x : 1%f .*  x = x.
 Proof. apply (scalE1 _ (fn _ HP 3)). Qed.
 
-Let scal_integral k x : k .* x = 0 -> {k = 0%f} + {x = 0}.
+Let scal_integral k x : k .* x = 0 -> (k = 0%f) \/ (x = 0).
 Proof. apply (scalE_integral _ (fn _ HP 3)). Qed.
 
 Lemma sub_add x y : x - y = x + (-(1))%f .* y.
@@ -223,7 +221,7 @@ Proof. apply hom0K; auto. Qed.
 
 Lemma hom0_E x : hom 0 x -> x ∨ E = 0 -> x = 0.
 Proof.
-intros H; rewrite (hom0E _ HP 3 _ H).
+intros H; rewrite (hom0E _ 3 _ H).
 rewrite (joinkl _ HP 3); intros H1.
 case (scal_integral _ _ H1); auto.
 intros H3; rewrite H3; auto.
@@ -794,7 +792,6 @@ Notation "x - y" := (Vsub _ x y).
 Notation "k .* x" := (Vscal _ k x).
 Notation "x '∧' y" := (Vmeet _ x y) (at level 45, left associativity).
 Notation "'@  x" := (Vdual _ x) (at level 9).
-Notation "x ?= y" := (Veq _ x y).
 Notation "0" := (Vgenk _ 0%f).
 Notation "1" := (Vgenk _ 1%f).
 Notation "'dC[ x ]" := (dconst _ _ 3 x).

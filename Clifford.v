@@ -37,7 +37,7 @@ Notation "'@ x " := (dual p _ x) (at level 9).
 Notation E := (all p _).
 
 Canonical Structure vn_eparams (n : nat) :=
-  Build_eparams (vect n) K [0] (eq p n) (add p n) (scal p n).
+  Build_eparams (vect n) K [0] (add p n) (scal p n).
 
 Ltac Vfold n :=
      change (VectorSpace.K p) with (K1 p);
@@ -324,13 +324,10 @@ induction n as [|n IH]; simpl; auto; try Vfold n.
 intros [|m]; simpl; Krm1.
 intros HH; contradict HH; auto with arith.
 intros [|m]; destruct x.
-  case eq0_spec; simpl; auto.
-  intros; subst.
-  rewrite rev0, hom0E with (2 := H1), revk, conj0; auto.
+  intros _ [-> Hv0]; simpl.
+  rewrite rev0, hom0E with (1 := Hv0), revk, conj0; auto.
   rewrite !scalE1; auto.
-intros; discriminate.
-rewrite andbP.
-intros HH [HH1 HH2].
+intros H [HH1 HH2].
 assert (HH' : m <= n); auto with arith.
 case (Lt.le_or_lt m.+1 n); intros HH''.
 rewrite IH with (2 := HH1); auto with arith.
@@ -339,7 +336,7 @@ rewrite conj_scal, !conjf_hom  with (2 := HH1); auto.
 rewrite <-scal_multE, <-expK_add; auto.
 rewrite Plus.plus_comm, div2_prop; simpl; auto.
 rewrite <-!Minus.minus_n_O; simpl; auto.
-rewrite hom_lt with (3 := HH2); auto with arith.
+rewrite hom_lt with (2 := HH2); auto with arith.
 rewrite rev0, IH with (2 := HH1); Vrm0.
 rewrite conj_scal, !conjf_hom  with (2 := HH1); auto.
 rewrite <-scal_multE, <-expK_add; auto.

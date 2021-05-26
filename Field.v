@@ -6,7 +6,6 @@ Structure fparams: Type := {
  K:> Set;               (* the scalar type *)
  v0: K;                (* 0 *)
  v1: K;                (* 1 *)
- eqK: K -> K -> bool;  (* = as a boolean function *)
  oppK: K -> K;         (* - unary *)
  addK : K -> K -> K;   (* + *)
  multK : K -> K -> K;  (* * *)
@@ -18,7 +17,6 @@ Structure fparams: Type := {
 Declare Scope field_scope.
 Delimit Scope field_scope with f.
 
-Notation "x ?= y" := (eqK _ x y) (at level 70) : field_scope.
 Notation "x + y" := (addK _ x y) : field_scope.
 Notation "- x" := (oppK _ x) : field_scope.
 Notation "x ^-1" := (invK _ x) (at level 25) : field_scope.
@@ -33,7 +31,7 @@ Open Scope field_scope.
 
 (* Properties associated with a params *)
 Structure fparamsProp: Type := {
- eqK_dec: forall x y: p, if x ?= y then x = y else x <> y;        
+ eqK_dec: forall x y: p, (x = y) \/ x <> y;        
           (* Boolean equality *)
  addK_assoc: forall x y z: p, (x + y) + z = x + (y + z);
           (* Associativity for + *)
@@ -66,16 +64,6 @@ Notation "x ^ k" := (expK x k) : field_scope.
 Variable Hp: fparamsProp.
 
 Implicit Types x y z: p.
-
-Lemma eqKI: forall x, x ?= x = true.
-Proof.
-intros x; generalize (eqK_dec Hp x x); case eqK; auto.
-Qed.
-
-Lemma eqK_spec x y: eq_Spec x y (x ?= y).
-Proof.
-generalize (eqK_dec Hp x y); case eqK; constructor; auto.
-Qed.
 
 (* Left oppositive for + *)
 Lemma oppKl:  forall x, - x + x = 0.
@@ -252,7 +240,7 @@ Qed.
 Lemma multK_integral x y : x * y = 0 -> x = 0 \/ y = 0.
 Proof.
 intros H.
-generalize (eqK_dec Hp x 0); case eqK; intros Hx; auto; right.
+case (eqK_dec Hp x 0); intros Hx; auto; right.
 apply (multK_cancel _ y  0 Hx); rewrite H; rewrite multK0r; auto.
 Qed.
 

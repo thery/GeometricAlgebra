@@ -28,15 +28,19 @@ Fixpoint vect (n: nat): Set :=
   match n with O => K | S n1 => (vect n1 * vect n1)%type end.
 
 (* Equality over two trees: Equality on leaves *)
-Fixpoint eq (n : nat) : vect n -> vect n -> bool :=
-  match n return (vect n -> vect n -> bool) with
-  | 0%nat => fun a b => (a ?= b)%f
-  | S n1 =>
-      fun l1 l2 =>
-      let (l3, l5) := l1 in
-      let (l4, l6) := l2 in 
-      if eq n1 l3 l4 then eq n1 l5 l6 else false
-  end.
+Lemma eqvect_dec (n : nat)  (v1 v2 : vect n) : (v1 = v2) \/ (v1 <> v2).
+Proof.
+induction n as [|n IH].
+  now exact (eqK_dec _ Hp v1 v2).
+destruct v1 as [v3 v5].
+destruct v2 as [v4 v6].
+case (IH v3 v4); intros H1.
+  case (IH v5 v6); intros H2.
+    now left; apply f_equal2.
+  now right; contradict H2; inversion H2.
+now right; contradict H1; inversion H1.
+Qed.
+    
 
 (* Adding two trees: adding its leaves *)
 Fixpoint add (n : nat) : vect n -> vect n -> vect n :=
@@ -64,17 +68,12 @@ Fixpoint scal (n : nat) (k: K) {struct n}: vect n -> vect n :=
   end.
 
 Canonical Structure vn_eparams (n: nat) :=
-  Build_eparams (vect n) K [0] (eq n) (add n) (scal n).
+  Build_eparams (vect n) K [0] (add n) (scal n).
 
 Definition fn n : vparamsProp (vn_eparams n).
 apply Build_vparamsProp; auto.
 (* Equality *)
-induction n as [| n IH]; simpl.
-  intros x y; apply eqK_dec; auto.
-intros (l3,l5) (l4, l6); simpl in IH; generalize (IH l3 l4); case eq.
-  generalize (IH l5 l6); case eq; intros HH1 HH2; subst; auto.
-  intros HH3; case HH1; injection HH3; auto.
-intros HH1 HH2; case HH1; injection HH2; auto.
+apply eqvect_dec.
 (* Addition is associative *)
 induction n as [| n IH]; simpl.
   intros x y z; rewrite (addK_assoc _ Hp); auto.
@@ -173,16 +172,7 @@ rewrite IH, scalE0r; auto.
 Qed.
 
 Lemma deck0 n (x: vect n):  x = 0 \/ x <> 0.
-Proof.
-induction n as [| n IH]; simpl; auto.
-generalize (eqK_dec _ Hp x 0%f).
-case eqK; auto.
-destruct x as (x1, x2).
-case (IH x1); auto; intros H1; subst.
-case (IH x2); auto; intros H1; subst; auto.
-right; intro HH; case H1; injection HH; auto.
-right; intro HH; case H1; injection HH; auto.
-Qed.
+Proof. now exact (eqvect_dec _ x 0). Qed.
 
 (* Generate the p element of the base in dimension n *)
 Fixpoint gen (n: nat) (p: nat) {struct n} : vect n :=
@@ -238,38 +228,6 @@ induction n as [| n IH]; simpl; try Vfold n; auto.
 destruct x1; destruct x2; rewrite IH; auto.
 Qed.
 
-(* Equality to zero: Equality to zero on leaves *)
-Fixpoint eq0 (n : nat) : vect n -> bool :=
-  match n return (vect n -> bool) with
-  | 0%nat => fun a => (a ?= 0)%f
-  | S n1 =>
-      fun l1 =>
-      let (l2, l3) := l1 in
-      if eq0 n1 l2 then eq0 n1 l3 else false
-  end.
-
-Notation "x ?= 0" := (eq0 _ x) (at level 70): g_scope.
-
-(* Equality to zero *)
-Lemma eq0_dec n (x: vect n) : if x ?= 0 then x = 0 else x <> 0.
-Proof.
-induction n as [| n IH]; simpl.
-  apply eqK_dec; auto.
-destruct x as [l1 l2]; generalize (IH l1); case eq0.
-  generalize (IH l2); case eq0; intros HH1 HH2; subst; auto.
-  intros HH3; case HH1; injection HH3; auto.
-intros HH1 HH2; case HH1; injection HH2; auto.
-Qed.
-
-Lemma eq0_spec n (x: vect n) : eq_Spec x 0 (x ?= 0).
-Proof. generalize (eq0_dec n x); case eq0; intros; constructor; auto. Qed.
-
-Lemma eq0I n : ((0: vect n) ?= 0) = true.
-Proof.
-induction n as [| n IH]; simpl.
-case eqK_spec; auto.
-simpl in IH; rewrite IH; auto.
-Qed.
 
 Lemma en_def n : 'e_n = 1 :> vect n.
 Proof.
@@ -302,14 +260,32 @@ rewrite scalE0r, IH; auto.
 Qed.
 
 (* Homogeneity *)
-Fixpoint hom (n k : nat) {struct n} : vect n -> bool :=
-  match n return (vect n -> bool) with
-  | 0%nat => fun a => match k with O => true | S _ => a ?= 0 end
+Fixpoint hom (n k : nat) {struct n} : vect n -> Prop :=
+  match n return (vect n -> Prop) with
+  | 0%nat => fun a => match k with O => True | S _ => a = 0 end
   | S n1 =>
       fun l1 =>
        let (l2, l3) := l1 in
-       (match k with O => l2 ?= 0 | S k1 => hom n1 k1 l2 end) && hom n1 k l3
+       (match k with O => l2 = 0 :> vect n1 | S k1 => hom n1 k1 l2 end) /\
+          hom n1 k l3
   end.
+
+Lemma hom_dec n k x : hom n k x \/ ~ hom n k x.
+Proof.
+generalize k; clear k.
+induction n as [|n IHn]; simpl.
+intros [|k]; auto.
+now apply eqK_dec.
+intros [|k]; destruct x as [x1 x2].
+case (eqvect_dec _ x1 [0]); intros H1.
+case (IHn x2 0%nat); intros H2; auto.
+now right; intros [H3 H4]; case H2.
+now right; intros [H3 H4]; case H1.
+case (IHn x1 k); intros H1; auto.
+case (IHn x2 k.+1); intros H2; auto.
+now right; intros [H3 H4]; case H2.
+now right; intros [H3 H4]; case H1.
+Qed.
 
 Lemma homk0 n k : hom n k 0.
 Proof.
@@ -317,8 +293,6 @@ generalize k; clear k.
 induction n as [|n IH]; simpl; auto.
   intros [|k]; auto; rewrite eqKI; auto.
 intros [|k]; auto.
-  rewrite eq0I; simpl; auto.
-rewrite !IH; auto.
 Qed.
 
 Hint Resolve homk0 : core.
@@ -326,8 +300,6 @@ Hint Resolve homk0 : core.
 Lemma hom0K n k : hom n 0 [k].
 Proof.
 induction n as [|n IH]; simpl; auto.
-case eq0_spec; auto.
-intros HH; case HH; auto.
 Qed.
 
 Hint Resolve hom0K : core.
@@ -337,17 +309,16 @@ Proof.
 generalize k; clear k.
 induction n as [|n IH]; intros [|k]; simpl; auto.
 intros _ H; contradict H; auto with arith.
-case eqK_spec; auto; intros; discriminate.
 intros _ H; contradict H; auto with arith.
-destruct x; rewrite andbP; intros (H1,H2) _.
+destruct x; intros (H1,H2) _.
 apply (IH _ k.+1); auto with arith.
 Qed.
 
 Lemma hom0E n (x: vect n) : hom n 0 x -> x = ['C[x]].
 Proof.
 induction n as [| n IH]; simpl; auto.
-destruct x; case eq0_spec; try (intros; discriminate).
-intros H H2; rewrite H, <-IH; auto.
+destruct x; try (intros; discriminate).
+intros (H, H2); rewrite H, <-IH; auto.
 Qed.
 
 Lemma hom1e n i : i < n -> hom n 1 'e_i.
@@ -355,7 +326,7 @@ Proof.
 generalize i; clear i.
 induction n as [|n IH]; simpl; auto.
   intros k HH; contradict HH; auto with arith.
-intros [|k]; simpl; rewrite hom0K; intros HH.
+intros [|k]; simpl; intros H1; split; auto.
 apply homk0.
 apply IH; auto with arith.
 Qed.
@@ -365,21 +336,21 @@ Lemma homE n k1 k2 (x: vect n) :
 Proof.
 assert (aux: forall n k1 k2, hom n k1.+1 [k2] -> k2 = 0%f).
   intros n1; elim n1; simpl; auto; clear n1.
-  intros _ k4; case eqK_spec; auto; intros; discriminate.
-  intros n1 IH k3 k4.
-  rewrite homk0; intros HH; apply (IH _ _ HH).
+  now intros k IH n1 k3 (H1, H2); apply (IH n1).
 generalize k1 k2 x; clear k1 k2 x.
 elim n; simpl; auto; clear n.
 intros [|k1] [|k2]; auto;
   try (intros x; case eqK_spec; auto; intros; discriminate).
 intros n IH [|k1] [|k2] (x1, x2); auto.
-case eq0_spec; try (intros; discriminate).
-rewrite !andbP; intros  H (_,H1) (_,H2).
-case (IH _ _ _ H1 H2); intros; subst; auto.
-case eq0_spec; try (intros; discriminate).
-rewrite !andbP; intros  H (_,H1) (_,H2).
-case (IH _ _ _ H1 H2); intros; subst; auto.
-rewrite !andbP; intros  (H1,H2) (H3,H4).
+intros (H1, H2) (H3, H4); rewrite H1.
+case (IH _ _ _ H2 H4); intros H5.
+  now left.
+now rewrite H5; right.
+intros (H1, H2) (H3, H4); rewrite H3.
+case (IH _ _ _ H2 H4); intros H5.
+  now left.
+now rewrite H5; right.
+intros (H1, H2) (H3, H4).
 case (IH _ _ _ H1 H3); intros; subst; auto.
 case (IH _ _ _ H2 H4); intros; subst; auto.
 Qed.
@@ -389,8 +360,7 @@ Proof.
 generalize k; clear k.
 induction n as [| n IH]; intros [|k]; simpl; auto;
   try (intros HH; contradict HH; auto with arith; fail).
-case eqK_spec; auto; intros; discriminate.
-destruct v as [x y]; intros H1; rewrite andbP; intros (H2, H3).
+destruct v as [x y]; intros H (H1, H2).
 rewrite (IH x k), (IH y k.+1); auto with arith.
 Qed.
 
@@ -400,14 +370,11 @@ Proof.
 generalize k; clear k.
 induction n as [| n IH]; simpl; try (Vfold n).
   intros k; case k; auto.
-  intros _; case eqK_spec; auto; intros Hx HH; try discriminate HH.
-  case eqK_spec; auto; intros Hy HH1; try discriminate HH1.
-  rewrite Hx; rewrite Hy; rewrite addK0l; auto.
-  rewrite eqKI; auto.
-intros [| k]; destruct x; destruct y; rewrite !andbP;
-  intros (H1, H2) (H3, H4); split; auto.
-generalize H1 H3; do 2 (case eq0_spec; try (intros; discriminate));
-  intros; subst; rewrite addE0l; auto.
+  intros _ -> ->; rewrite addK0l; auto.
+intros [| k]; destruct x; destruct y.
+  intros (->, H2) (->, H4); split; auto.
+  now rewrite addE0l.
+now intros (H1, H2) (H3, H4); split; apply IH.
 Qed.
 
 Hint Resolve add_hom : core.
@@ -418,12 +385,11 @@ Proof.
 generalize k1; clear k1.
 induction n as [| n IH]; simpl; try (Vfold n).
   intros k1; case k1; auto.
-  intros _;  case eqK_spec; auto; intros Hx HH; try discriminate.
-  rewrite Hx; rewrite multK0r, eqKI; auto.
-intros [| k]; destruct x; rewrite !andbP; 
-  intros (H1, H2); split; auto.
-generalize H1; case eq0_spec; try (intros; discriminate);
-  intros; subst; rewrite scalE0r, eq0I; auto.
+  now intros _ ->; rewrite multK0r.
+intros [| k]; destruct x.
+  intros (->, H2); split; auto.
+  now rewrite scalE0r.
+now intros (H1, H2); split; apply IH.
 Qed.
 
 Hint Resolve scal_hom : core.
@@ -538,19 +504,21 @@ Lemma hom_get_hom n (x : vect n) m : hom n m (get_hom n m x).
 Proof.
 generalize m; induction n as [|n IH]; simpl; auto.
 intros []; auto.
-rewrite eqKI; auto.
 intros [|m1]; destruct x as [x1 x2].
-rewrite eq0I, IH; auto.
-rewrite !IH; auto.
+now split; auto.
+now split; apply IH.
 Qed.
 
+(* 
 (* First degre that is used to guess if a vector is homegene *)
-Fixpoint first_deg (n : nat) {struct n} : vect n -> nat :=
-  match n return (vect n -> nat) with
-  | 0%nat => fun a => 0%nat
+Fixpoint first_deg (n : nat) {struct n} : vect n -> nat -> Prop :=
+  match n return (vect n -> nat -> Prop ) with
+  | 0%nat => fun a => a = 0%nat
   | S n1 =>
       fun l1 =>
       let (l2, l3) := l1 in
+      (l2 = 0 ->  first_deg n1 l3 a)
+      (l2 <> 0 -> first_deg)
       if l2 ?= 0 then first_deg n1 l3 else S (first_deg n1 l2)
   end.
 
@@ -582,6 +550,7 @@ destruct x; rewrite andbP; case eq0_spec; intros Hx Hy (H1,H2).
 apply IH; auto; intros H3; case Hy; subst; auto.
 rewrite (IH _ k); auto.
 Qed.
+*)
 
 (* Lift a vector of dimension n into a vector of dimension n+1 whose
    first component is 0 *)
@@ -681,8 +650,8 @@ Lemma proj_hom0_eq n x y :
 Proof.
 induction n as [| n IH]; simpl; auto.
 destruct x; destruct y.
-do 2 (case eq0_spec; try (intros; discriminate)).
-intros; subst; apply f_equal2 with (f := @pair _ _); auto.
+intros (->, H1) (->, H2) H3.
+now rewrite (IH _ _ H1 H2); auto.
 Qed.
 
 Lemma proj_lt n m x : n < m -> proj n m x = nil.
@@ -698,7 +667,8 @@ Lemma proj_homn_eq n x y :
   nth 0 (proj n n x) 0%f = nth 0 (proj n n y) 0%f ->  x = y.
 Proof.
 induction n as [| n IH]; simpl; auto.
-destruct x; destruct y; rewrite !andbP; intros (H1,H2) (H3,H4).
+destruct x; destruct y; simpl.
+intros (H1, H2) (H3, H4).
 rewrite hom_lt with (2:= H2); auto with arith.
 rewrite hom_lt with (2:= H4); auto with arith.
 rewrite !(proj_lt n n.+1), <-!app_nil_end; auto with arith.
@@ -716,7 +686,8 @@ Notation "'E'" := (all _).
 Lemma all_hom n : hom n n E.
 Proof.
 induction n as [| n IH]; simpl; auto.
-rewrite IH, homk0; auto.
+split; try now apply IH.
+now apply homk0.
 Qed.
 
 Hint Resolve all_hom : core.
@@ -784,15 +755,18 @@ intros HH; contradict HH; auto with arith.
 destruct v as [v1 v2].
 rewrite base0, en_def; simpl.
 intros _ [H1|[]]; injection H1; intros; subst.
-rewrite eq0I, hom0K; auto.
+now split.
 intros HH; case (Lt.le_lt_or_eq k n); auto with arith; intros H1 H2; subst.
 case (in_app_or _ _ _ H2); rewrite in_map_iff;
   intros (v1, ([],Hv1)); simpl.
-rewrite IH, homk0; auto with arith.
-rewrite homk0, IH; auto with arith.
+split; auto with arith.
+now apply homk0.
+split; auto with arith.
+now apply homk0.
 rewrite base_n, base_lt_nil in H2; auto.
 simpl in H2; case H2; intros []; simpl.
-rewrite all_hom, homk0; auto.
+split; auto.
+apply homk0; auto.
 Qed.
 
 Lemma proj_homk n (x: vect n) k : 
@@ -805,17 +779,14 @@ rewrite (mprod_S (vn_eparams 0)); auto.
     rewrite mprod0l, addE0r; auto.
     simpl; rewrite multK1r; auto.
   rewrite mprod0r.
-generalize Hx; case eqK_spec; auto.
-intros; discriminate.
+now rewrite Hx.
 intros [|k ]; destruct x.
-case eq0_spec; intros Hx Hx1; try discriminate; subst.
+intros (->, Hx1); try discriminate; subst.
 rewrite lift_mprod, IH; auto.
-intros HH.
+intros (HH, HH1).
 rewrite (mprod_app (vn_eparams n.+1)); auto.
 rewrite  !lift_mprod, !dlift_mprod, !IH; auto.
 simpl; Vfold n; rewrite addE0l, addE0r; auto.
-generalize HH; case hom; auto; intros; discriminate.
-generalize HH; case hom; auto; intros; discriminate.
 rewrite map_length, proj_base_length; auto.
 Qed.
 
@@ -897,8 +868,9 @@ Qed.
 
 Lemma cbl1_hom1_equiv n (x: vect n) : cbl _ (base n 1) x <-> hom n 1 x.
 Proof.
-split; intros Hx; elim Hx.
-rewrite homk0; auto.
+split; intros Hx.
+elim Hx.
+apply homk0; auto.
 intros v Hv.
 case (e_in_base1_ex _ _ Hv); intros i (Hi, Hei); subst.
 apply hom1e; auto.
@@ -917,43 +889,44 @@ replace x with (x .* 1: vect 0).
 apply cbl_scal.
 constructor; auto with datatypes.
 rewrite scalk, multK1r; auto.
-elim H.
-rewrite eqKI; auto.
+elim H; auto.
 intros v [].
-intros x1 y1 _; do 2 (case eqK_spec; auto; intros HH; subst; try (intros; discriminate)).
-Vrm0; rewrite eqKI; auto.
-intros k1 x1 _; case eqK_spec; auto; intros HH HH1; subst; Vrm0;
-  try discriminate; rewrite eqKI; auto.
-generalize H; case eqK_spec; auto; intros; subst; try discriminate.
+intros x1 y1 HH1 -> HH2 ->; Vrm0.
+intros k1 x1 HH1 ->; Vrm0.
+rewrite H.
 constructor.
 intros [| k]; destruct x as [x y]; split; intros HH.
 case (cbl_map_inv _ _ (lift n) id id) with (5 := HH); auto.
 intros; apply (lift_add n).
 intros; apply (lift_scal n).
 intros x1 (H1x1, H2x1); injection H2x1; intros; subst.
-rewrite eq0I; simpl; rewrite <- IH; auto.
-generalize HH; case eq0_spec; try (intros; discriminate).
-intros H1 H2; subst.
+split; auto.
+apply IH; auto.
+case HH; intros -> HH1.
 apply cbl_map with (f := lift n) (g:= id); auto.
 intros; apply (lift_add n).
 intros; apply (lift_scal n).
 rewrite IH; auto.
-rewrite andbP; rewrite <-!IH.
+assert  (cbl (vn_eparams n) (base n k) x /\ 
+           cbl (vn_eparams n) (base n k.+1) y).
+  2: now destruct H; split; apply IH.
 generalize HH; clear HH.
 generalize (base n k) (base n k.+1); intros l1 l2.
 assert (He: exists l3, l3 = (map
  (dlift n) l1 ++ map (lift n) l2)%list).
 exists (map (dlift n) l1 ++ map (lift n) l2)%list; auto.
 intros HH.
-change (cbl (vn_eparams n) l1 (fst (x, y)) /\ cbl (vn_eparams n) l2 (snd (x, y))).
+change (cbl (vn_eparams n) l1 (fst (x, y)) /\
+        cbl (vn_eparams n) l2 (snd (x, y))).
 case He; intros l3 Hl3; simpl in Hl3; rewrite <-Hl3 in HH; generalize Hl3.
 elim HH; clear HH Hl3.
 intros; split; constructor.
 simpl; intros (x1, y1) H1 H2; subst.
 case (in_app_or _ _ _ H1); rewrite in_map_iff; intros (v, (H1v, H2v));
-  injection H1v; intros; subst; split; constructor; auto.
+  injection H1v; intros; split; subst; constructor; auto.
 simpl; intros (x1,x2) (y1, y2) Hx1 H1 H2 H3 H4; Vfold n.
-split; auto; simpl fst; simpl snd; apply cbl_add; auto.
+auto; simpl fst; simpl snd.
+split; apply cbl_add; auto.
 case H1; auto.
 case H3; auto.
 case H1; auto.
@@ -962,7 +935,7 @@ simpl; intros k1 (x1, x2) Hx1 H1 H2.
 split; auto; simpl fst; simpl snd; apply cbl_scal; auto.
 case H1; auto.
 case H1; auto.
-rewrite andbP in HH; case HH; intros HH1 HH2.
+case HH; intros HH1 HH2.
 replace (x,y) with (dlift n x + lift n y).
 apply cbl_add.
 apply cbl_incl with (l1 := map (dlift n) (base n k)); auto with datatypes.
@@ -1019,7 +992,7 @@ case IH; auto with datatypes.
 intros lk (ly, (H1ly, (H2ly, (H3ly, H4ly)))).
 case (cbl_base1_split n a); auto with datatypes.
 intros k (y, (H1y, H2y)); subst a.
-generalize (eqK_dec _ Hp k 0%f); case eqK; intros Hk; try subst k.
+case (eqK_dec _ Hp k 0%f); intros Hk; try subst k.
 exists lk; exists (y::ly); repeat split; auto with datatypes.
 simpl; intros i1 [Hi1 | Hi1]; try subst i1; auto.
 apply perm_trans with 
@@ -1134,11 +1107,9 @@ Proof.
 generalize b k; clear b k.
 induction n as [| n IH]; simpl.
   intros [|] [|k]; auto.
-  case eqK_spec; auto; intros HH HH1; try discriminate.
-  rewrite HH, oppK0, eqKI; auto.
-intros b [|k]; destruct x; rewrite !andbP; intros (H1, H2); split; auto.
-generalize H1; case eq0_spec; intros Hx1 HH; try discriminate.
-  rewrite Hx1, conj0, eq0I; auto.
+  now intros HH; rewrite HH, oppK0.
+intros b [|k]; destruct x; intros (H1, H2); split; auto.
+now rewrite H1, conj0.
 Qed.
 
 Hint Resolve conj_hom : core.
@@ -1148,12 +1119,10 @@ Proof.
 generalize k; clear k.
 induction n as [| n IH];simpl; auto; try Vfold n.
 intros [|k] H; simpl; Krm1.
-generalize H; case eqK_spec; try (intros; discriminate); auto.
-intros H1; rewrite H1; Krm0.
-intros [| k]; destruct M; rewrite andbP; intros (HM1, HM2);
+rewrite H; Krm0.
+intros [| k]; destruct M; intros (HM1, HM2);
   rewrite conjt; simpl; Vfold n; Krm1.
-generalize HM1; case eq0_spec; try (intros; discriminate); auto.
-intros H1; rewrite H1, (IH _ _ HM2); simpl; Vfold n; Krm1.
+rewrite HM1, (IH _ _ HM2); simpl; Vfold n; Krm1.
 rewrite conj0; Vrm0.
 rewrite (IH _ _ HM1), (IH _ _ HM2).
 simpl; Vfold n; rewrite <-!scal_multE; Krm1.
@@ -1477,49 +1446,34 @@ Proof.
 generalize k1 k2; clear k1 k2.
 induction n as [| n IH]; simpl; try Vfold n.
   intros [|k1] [|k2]; simpl; auto.
-  intros _; case eqK_spec; auto; intros HH HH1; try discriminate.
-    rewrite HH, multK0r, eqKI; auto.
-  case eqK_spec; auto; intros HH HH1 _; try discriminate.
-    rewrite HH, multK0l, eqKI; auto.
-  intros _; case eqK_spec; auto; intros HH HH1; try discriminate.
-    rewrite HH, multK0r, eqKI; auto.
+  now intros _ HH; rewrite HH, multK0r.
+  now intros HH _; rewrite HH, multK0l.
+  now intros HH1 HH2; rewrite HH1, multK0l.
 intros [|k1] [|k2];
     destruct x as [x1 x2]; destruct y as [y1 y2]; simpl; auto; Vfold n.
-case eq0_spec; case eq0_spec; try (intros; discriminate);
-  intros HH1 HH2; subst.
-  rewrite join0l, join0r, addE0l, eq0I; auto; intros HH1 HH2.
-  rewrite (hom0E _ _ HH1), (hom0E _ _ HH2), joink, hom0K; auto.
-case eq0_spec; try (intros; discriminate);
-  intros HH1 HH2 HH3; subst.
+intros (->, H1) (->, H2); split; auto.
+  now rewrite join0l, join0r, addE0l.
+  rewrite (hom0E _ _ H1), (hom0E _ _ H2), joink.
+  now apply hom0K.
+intros (->, HH1) (HH2, HH3); split.
   rewrite join0l, addE0l; auto.
-  generalize (IH x2 y1 0%nat k2.+1 HH2).
-  intros HH4.
-  rewrite (IH _ _ 0%nat k2); auto.
-  apply (IH _ _ 0%nat k2.+1); auto.
-  generalize HH3; case hom; auto; intros; discriminate.
-  generalize HH3; case hom; auto.
-case eq0_spec; try (intros; discriminate);
-  intros HH1 HH2 HH3; subst.
+  change k2 with (0 + k2)%nat.
+  now apply IH; auto.
+  change k2.+1 with (0 + k2.+1)%nat.
+  now apply IH.
+intros (HH1, HH2) (->, HH3).
   rewrite join0r, addE0r, <- plus_n_O; auto.
+  split.
   pattern k1 at 1; rewrite (plus_n_O k1).
-  rewrite IH; auto.
+  now apply IH.
   rewrite  (plus_n_O k1.+1).
   apply IH; auto.
-  generalize HH2; case hom; auto; intros; discriminate.
-  generalize HH2; case hom; auto; intros; discriminate.
-intros HH1 HH2.
-assert (Hx1: hom n k1 x1).
-  generalize HH1; case hom; auto.
-assert (Hx2: hom n k1.+1 x2).
-  generalize HH1; rewrite Hx1; auto.
-assert (Hy1: hom n k2 y1).
-  generalize HH2; case hom; auto.
-assert (Hy2: hom n k2.+1 y2).
-  generalize HH2; rewrite Hy1; auto.
-rewrite add_hom; auto.
-apply (IH _ _ k1.+1 k2.+1); auto.
+intros (Hx1, Hx2) (Hx3, Hx4).
+split.
+apply add_hom; auto.
 rewrite <- Plus.plus_Snm_nSm.
-apply IH; auto.
+now apply IH; auto.
+apply (IH _ _ k1.+1 k2.+1); auto.
 Qed.
 
 Hint Resolve join_hom : core.
@@ -2047,7 +2001,7 @@ simpl map;
 intros ly2 (i2, (H1ly2, (H2ly2, (H3ly3, H3ly4)))).
 case (length_split _ _ _ _ _ _ _ H1ly2).
 intros k1 (k2, (lk1, (lk2, (Hlk1, (Hlk2, Hlk3))))).
-generalize (eqK_dec _ Hp k2 0%f); case eqK; intros Hk2.
+case (eqK_dec _ Hp k2 0%f); intros Hk2.
 *
 exists (k1::0%f::lk1++lk2)%list; exists i2; repeat split; auto.
 generalize Hlk2 Hlk3; simpl; clear Hlk2 Hlk3; intros Hlk2 Hlk3.
@@ -2126,7 +2080,7 @@ case (joinl0_mprod n (x::l)); auto with datatypes.
 simpl; intros x1 [Hx1 | Hx1]; subst; auto with datatypes.
 rewrite joinlS; auto; intros HH1; case Hdiff; rewrite HH1; auto.
 intros [| k lk] (i, (H1lk, (H2lk, (H3lk, H4lk)))); try discriminate.
-generalize (eqK_dec _ Hp k 0%f); case eqK; intros Hk; subst; auto.
+case (eqK_dec _ Hp k 0%f); intros Hk; subst; auto.
 generalize H4lk.
 rewrite (mprod_S (vn_eparams n)); auto.
 rewrite (scalE0l (vn_eparams n)); auto.
@@ -2139,7 +2093,7 @@ elim lk; simpl; auto.
 intros l; case l; intros; try discriminate; auto.
 intros a l IH [| b l1] H1l1 H2l1.
 case H2l1; auto.
-generalize (eqK_dec _ Hp a 0%f); case eqK; intros Ha; simpl in Ha.
+case (eqK_dec _ Hp a 0%f); intros Ha; simpl in Ha.
 rewrite (mprod_S (vn_eparams n)), Ha, (scalE0l (vn_eparams n)), addE0l; auto.
 intros HH [HH1 | HH1]; try (case H3lk; auto; fail).
 intros HH2; injection HH2; clear HH2; intros HH2.
@@ -2307,17 +2261,18 @@ Lemma contra_hom n lf k M : hom n k.+1 M -> hom n k #<lf , M>#.
 Proof.
 generalize k; clear k.
 induction n as [| n IH]; simpl; intros [|k1]; simpl; auto.
- rewrite eqKI; auto.
-intros H; destruct lf.
-destruct M as [M1 M2]; try rewrite eq0I; rewrite ?homk0; auto.
-assert (Hm1: hom n 0 M1); [generalize H; case hom; auto | idtac].
-assert (Hm2: hom n 1 M2); [generalize H; repeat (case hom; auto) | clear H].
+destruct M as [M1 M2]; intros (Hm1, Hm2).
+destruct lf.
+rewrite ?homk0; auto.
+split.
   rewrite (hom0E _ _ Hm1); Vfold n.
-  rewrite contrak, scalE0r, eq0I,  add_hom; auto; apply scal_hom; apply hom0K; auto.
-destruct lf; destruct M as [M1 M2]; intros H.
-assert (Hm1: hom n k1.+1 M1); [generalize H; case hom; auto | idtac].
-assert (Hm2: hom n k1.+2 M2); [generalize H; repeat (case hom; auto) | clear H]; auto.
-Vfold n; rewrite scal_hom, add_hom; auto.
+  now rewrite contrak, scalE0r.
+apply add_hom; auto.
+now apply scal_hom.
+destruct lf; destruct M as [M1 M2]; intros [Hm1 Hm2].
+Vfold n; split.
+  apply scal_hom; auto.
+  apply add_hom; auto.
 Qed.
 
 Hint Resolve contra_hom : core.
@@ -2355,9 +2310,7 @@ Lemma contra_const n lf M : hom n 1 M ->
   #<lf, M># = [(lf [.] v2k n M)%Kn].
 Proof.
 induction n as [| n IH]; simpl; Krm0.
-destruct lf; destruct M as [M1 M2]; intros HM12.
-assert (HM1: hom n 0 M1) by (generalize HM12; case hom; auto).
-assert (HM2: hom n 1 M2) by (generalize HM12; rewrite HM1; case hom; auto).
+destruct lf; destruct M as [M1 M2]; intros [HM1 HM2].
 rewrite (hom0E _ _ HM1); Vfold n.
 rewrite contrak, scalE0r, IH; auto.
 apply f_equal2 with (f := @pair _ _); auto.
@@ -2372,29 +2325,23 @@ induction n as [| n IH]; simpl; auto; try Vfold n.
 intros lf [| k1] [| k2]; Grm0.
 intros [k lf] [| k1] [| k2]; destruct M2 as [M3 M4]; destruct M1 as [M1 M2]; 
   simpl expK; Grm0.
-case eq0_spec; try (intros; discriminate); intros HH HM2; subst; Grm0.
-case eq0_spec; try (intros; discriminate); intros HH HM3; subst; Grm0.
+intros [-> HM2]; Grm0.
+intros [-> HM3]; Grm0.
 assert (Hk24 := join_hom _ _ _ _ _ HM2 HM3).
 rewrite (hom0E _ _ Hk24), (hom0E _ _ HM2), (hom0E _ _ HM3), !contrak; Grm0.
-case eq0_spec; try (intros; discriminate); intros HH HM2; subst; Grm0.
+intros [-> HM2] [HM3 HM4]; Grm0.
 rewrite (hom0E _ _ HM2).
 repeat ((rewrite conjk || rewrite scalE1 || rewrite joinkl ||
          rewrite contra_scalr || rewrite contrak); Grm0).
 repeat ((rewrite scal_addEr || rewrite <- scal_multE); auto).
 rewrite multK_com, (multK_com _ Hp k); auto.
-intros HH.
-case eq0_spec; try (intros; discriminate); intros HH1 HM3; subst; Grm0.
+intros [HM1 HM2] [-> HM3]; Grm0.
 rewrite (hom0E _ _ HM3).
 repeat ((rewrite conjk || rewrite scalE1 || rewrite joinkl ||
          rewrite joinkr ||rewrite contra_scalr || rewrite contrak); Grm0).
 repeat ((rewrite scal_addEr || rewrite <- scal_multE); auto).
 rewrite multK_com, (multK_com _ Hp k); auto.
-intros HM1 HM2.
-assert (F1: hom n k1 M1) by (generalize HM1; case hom; auto).
-assert (F2: hom n k1.+1 M2) by (generalize HM1; case hom; auto; intros; discriminate).
-assert (F3: hom n k2 M3) by (generalize HM2; case hom; auto).
-assert (F4: hom n k2.+1 M4) by (generalize HM2; case hom; auto; intros; discriminate).
-clear HM1 HM2.
+intros [F1 F2] [F3 F4].
 rewrite !contra_addr, (conjf_hom n k1.+1 M2), join_scall, conj_add; auto.
 repeat (rewrite conj_scal || rewrite contra_scalr || rewrite scal_addE_r); auto.
 rewrite (IH M1 M4  lf k1 k2.+1); auto; simpl expK.
@@ -2425,21 +2372,16 @@ generalize k1 k2; clear k1 k2.
 induction n as [| n IH]; simpl; try Vfold n.
 intros [|k1] [|k2] Hk1 Hk2; simpl expK.
 rewrite multK1l, multK_com; auto.
-generalize Hk2; case eqK_spec; auto; intros; subst; Krm0; discriminate.
-generalize Hk1; case eqK_spec; auto; intros; subst; Krm0; discriminate.
-generalize Hk1; case eqK_spec; auto; intros; subst; Krm0; discriminate.
+now rewrite Hk2; Krm0.
+now rewrite Hk1; Krm0.
+now rewrite Hk1, Hk2; Krm0.
 intros [|k1] [|k2] Hk1 Hk2; simpl expK; 
   destruct x as [x1 x2]; destruct y as [y1 y2];
-  try (generalize Hk1; case eq0_spec; intros; subst; Grm0; try discriminate);
-  try (generalize Hk2; case eq0_spec; intros; subst; Grm0; try discriminate).
+  try destruct Hk1; try destruct Hk2; subst; Grm0.
 rewrite (hom0E n x2), (hom0E n y2); auto; simpl; Vfold n.
 rewrite scalE1, !joink, multK_com; auto.
 rewrite (hom0E n x2), conjk, !joinkl, !joinkr, !scalE1; auto.
 rewrite (hom0E n y2), <-!mult_n_O, conjk, !joinkl, !joinkr, !scalE1; auto.
-assert (Hh1: hom n k1 x1) by (generalize Hk1; case hom; auto).
-assert (Hh2: hom n k1.+1 x2) by (generalize Hk1; case hom; intros; auto; discriminate).
-assert (Hh3: hom n k2 y1) by (generalize Hk2; case hom; auto).
-assert (Hh4: hom n k2.+1 y2) by (generalize Hk2; case hom; intros; auto; discriminate).
 rewrite (conjf_hom _ k2.+1), join_scall, (conjf_hom _ k1.+1), join_scall; auto.
 apply f_equal2 with (f := @pair _ _).
 rewrite  addE_com, scal_addEr; auto.
@@ -2471,8 +2413,8 @@ generalize k; clear k.
 induction n as [| n IH]; simpl; try Vfold n.
 intros [|k] Hk; simpl expK.
 intros HH; inversion HH.
-generalize Hk; case eqK_spec; intros; subst; Krm0; discriminate.
-intros [|k]; destruct x as [x y]; rewrite andbP; intros (Hk1,Hk2).
+now intros; subst; Krm0.
+intros [|k]; destruct x as [x y]; intros (Hk1,Hk2).
 intros HH; inversion HH.
 intros Ho; rewrite (IH _ k.+1); auto.
 rewrite conjf_hom with (k := S k); auto.
@@ -2516,6 +2458,7 @@ case Hxy.
 intros HH; discriminate.
 Qed.
 
+(* 
 (* This function will be only call with first vector is hom 1 *)
 Fixpoint factor n: (vect n) -> (vect n) -> vect n :=
   match n return vect n -> vect n -> vect n with
@@ -2699,7 +2642,9 @@ generalize Eq2; pattern x11 at 1; rewrite (hom0E _ _ H2), joinkl.
 rewrite conjf_hom with (1 := H3); simpl expK;
   rewrite multK1r; auto.
 Qed.
+*)
 
+(*
 (* Orthogonalité for factorisation, i.e. condition for factorisation to be idempotent *)
 Fixpoint fortho n : (vect n) -> (vect n) -> bool :=
   match n return vect n -> vect n -> bool with
@@ -2865,6 +2810,7 @@ repeat apply fortho_scal; auto.
 apply forthok with 0%nat; auto.
 apply IH; auto.
 Qed.
+*)
 
 Lemma joinl_addmult n (f: vect n -> vect n -> K) x l :
 hom n 1 x -> (forall i, In i l -> hom n 1 i) ->
@@ -2893,6 +2839,8 @@ rewrite mprod_S; auto with datatypes.
 Qed.
 
 Hint Resolve mprod_hom : core.
+
+(*
 
 Definition is_decomposable n M := exists l, decomposable n l M.
 
@@ -3060,6 +3008,7 @@ intros HH; injection HH; intros Hv0.
 rewrite (IH _ _ _  Hk1k2 Ho2 Hv0); auto.
 intros HH1 HH2; case HH1; injection HH2; auto.
 Qed.
+*)
 
 (* Iterated contraction *)
 
@@ -3171,6 +3120,7 @@ rewrite contra0r; Vrm0.
 apply (IH #<lf, x>#).
 Qed.
 
+(* 
 Lemma mcontra_one_factor n k1 k2 (x: vect n) :
   k2 < k1 -> hom n k1 x -> 
  exists lfs, length lfs = k2 /\ #<<lfs , x>># = one_factor n k2 x.
@@ -3210,6 +3160,7 @@ rewrite !contra0l, scalE1; Vrm0.
 rewrite <- H2lfs1.
 apply (lift_mcontra n); auto.
 Qed.
+*)
 
 Inductive cbl n (l: list (vect n)): nat -> (vect n) -> Prop :=
 | cbl_in: forall v, In v l -> cbl n l 0%nat v
@@ -3306,6 +3257,7 @@ intros H1; apply IH; auto with arith.
 destruct k as [| k]; apply cbl_contra; auto.
 Qed.
 
+(* 
 Lemma decomp_one_factor_hom n (l: list (vect n)) M : l <> nil ->
  decomposable n l M -> hom n 1 (one_factor n (pred (length l)) M).
 Proof.
@@ -3419,40 +3371,56 @@ apply Hr1; auto.
 rewrite decomposekSS, joinlS, <-Hr2; auto.
 destruct k; simpl; intros; discriminate.
 Qed.
+*)
+ 
+Definition all_hom1 n l := fold_left (fun c x => c /\ hom n 1 x) l True.
 
-Definition all_hom1 n l := fold_left (fun c x => c && hom n 1 x) l true.
-
-Lemma all_hom1_cor n l :
- if all_hom1 n l then forall i, In i l -> hom n 1 i else 
-     exists i, In i l /\ ~ hom n 1 i.
+Lemma all_hom1_dec n l : all_hom1 n l \/ ~ all_hom1 n l.
 Proof.
 unfold all_hom1.
-assert (F1: forall b,
-   if fold_left (fun c x => c && hom n 1 x) l b
-   then b /\ forall i : vect n, In i l -> hom n 1 i
-   else ~b \/ exists i, In i l /\ ~ hom n 1 i).
-induction l as [| a l IH]; simpl.
-intros []; auto.
-split; auto; intros i [].
-left; intros; discriminate.
-intros b; generalize (IH (b && hom n 1 a)).
-match goal with |- context[fold_left ?X ?Y ?Z] =>
-  case (fold_left X Y Z); auto
-end; rewrite andbP.
-intros ((H1,H2),H3); split; auto.
-intros i [[]|Hi]; auto.
-intros [H1 | H1].
-case_eq (hom n 1 a); intros Ha.
-left; intros Hb; case H1; auto.
-right; exists a; split; auto; rewrite Ha.
-intros; discriminate.
-case H1; intros i [H1i H2i]; right; exists i; split; auto.
-generalize (F1 true).
-match goal with |- context[fold_left ?X ?Y ?Z] =>
-  case (fold_left X Y Z); auto
-end. intros []; auto.  intros []; auto. contradict H; auto.
+assert (H : True \/ ~True) by auto.
+generalize True H.
+elim l;  simpl; auto; clear l.
+intros a l IH P Pdec.
+apply IH.
+case Pdec; intros H1.
+case (hom_dec n 1 a); intros H2; auto.
+now right; intros [H3 H4]; case H2.
+now right; intros [H3 H4]; case H1.
 Qed.
 
+Lemma all_hom1_forall n l :
+  all_hom1 n l -> forall i, In i l -> hom n 1 i.
+Proof.
+unfold all_hom1; generalize True.
+elim l;  simpl; auto; clear l.
+now intros P _ i [].
+intros a l IH P FH i HH.
+assert (F : P /\ hom n 1 a).
+  generalize (P /\ hom n 1 a) FH; elim l; simpl; auto.
+  intros a1 l1 IH1 P1 HH1.
+  now case (IH1 _ HH1).
+destruct F.
+destruct HH; subst; auto.
+now apply IH with (P := (P /\ hom n 1 a)); auto.
+Qed.
+
+Lemma all_hom1_exists n l :
+  ~ all_hom1 n l ->  exists i, In i l /\ ~ hom n 1 i.
+Proof.
+unfold all_hom1.
+assert (H : True) by auto; generalize True H.
+elim l;  simpl; auto; clear l.
+now intros P HP [].
+intros a l IH P HP HF.
+destruct (hom_dec n 1 a).
+assert (F1 : P /\  hom n 1 a) by auto.
+destruct (IH (P /\ hom n 1 a) F1 HF) as [x [H1 h2]].
+now exists x; auto.
+now exists a; auto.
+Qed.
+
+(* 
 Definition decompose n (v: vect n) : option (list (vect n)) := 
   let d := first_deg n v in
   let l := decomposek n d v in
@@ -3512,45 +3480,23 @@ rewrite <-cbl1_hom1_equiv; auto.
 apply H2; auto.
 rewrite <-(hom_first_deg n (length l) v); auto.
 Qed.
+*)
 
 (* Grade definition *)
-Definition grade n k x := hom n k x &&  
-  if decompose n x then true else false.
-
-Lemma gradeE n k x : 
-  grade n k x <->  hom n k x /\
-                   exists l, x = joinl n l /\
-                             (forall y, In y l -> hom n 1 y).
-Proof.
-unfold grade.
-generalize (decompose_cor n x); case decompose; 
-  rewrite andb_comm; simpl; auto.
-intros l (H1,H2); subst.
-assert (H4: forall x : vect n, In x l -> hom n 1 x).
-intros x H4; rewrite <-cbl1_hom1_equiv; apply H1; auto.
-split.
-intros H3; split; auto.
-exists l; split; auto.
-intros (HH,_); auto.
-intros HH; split.
-intros HH1; discriminate.
-intros (H1, (l, (H1l,H2l))).
-case HH.
-exists l; split; auto.
-intros u Hu; red; rewrite cbl1_hom1_equiv; auto.
-Qed.
+Definition grade n k x :=
+   hom n k x /\
+                   exists l, x = joinl n l /\ 
+                  (forall i, In i l -> hom n 1 i).
 
 Lemma grade0 n k : grade n k 0.
 Proof.
-unfold grade; rewrite homk0.
-generalize (decompose_cor n 0); case decompose; auto.
-intros []; exists nil; split; auto.
-intros x1 [].
+split; auto.
+exists nil; split; auto.
+now simpl.
 Qed.
 
 Lemma grade0E n x : grade n 0 x -> x = 0.
 Proof.
-rewrite gradeE.
 intros  (Hx, (l, (H1l, H2l))); subst.
 destruct l as [|y l]; auto.
 case (homE n (length (y::l)) 0 (joinl n (y::l))); auto.
@@ -3558,12 +3504,39 @@ intros; discriminate.
 Qed.
 
 Lemma grade_hom n k x : grade n k x -> hom n k x.
-Proof.
-unfold grade; rewrite andbP; intros (H,_); auto.
-Qed.
+Proof. now intros []. Qed.
 
-Lemma grade1_hom n x : grade n 1 x = hom n 1 x.
+(*
+Lemma grade1_hom n x : hom n 1 x -> grade n 1 x.
 Proof.
+intros Hh; split; auto.
+generalize x Hh; elim n; simpl.
+  intros x1 ->; exists nil; split; auto.
+  now unfold all_hom1; simpl.
+intros n1 IH [x1 x2] [H1 H2].
+rewrite (hom0E _ _ H1).
+case (IH _ H2); intros l [H1l H2l].
+exists (cons ([0], ['C[ x1]])
+            (map (fun x : vect n1 => ([0], x) : vect n1.+1) l)).
+split.
+rewrite H1l.
+elim l; simpl.
+assert (H : map
+        (fun x0 : vect n1
+         => ([0], x0)) l = 
+         ([0], ma))
+simpl.
+
+
+
+assert ((([0], x1) : vect n1.+1) ∨ (([0], x2) : vect n1.+1) = 0).
+simpl.
+Search (join _ _) ([_]).
+unfold hom in Hh.
+simpl in Hh.  
+case (hom_dec n 1 x); intros H1.
+unfold grade.
+Check decompose_cor.
 unfold grade.
 case_eq (hom n 1 x); auto.
 intros H.
@@ -3572,12 +3545,14 @@ intros []; exists (x::nil); split; auto.
 intros x1; simpl; intros [[]|[]].
 red; rewrite cbl1_hom1_equiv, H; auto.
 Qed.
+*)
 
 Lemma grade_scal n k1 k2 x : grade n k1 x -> grade n k1 (k2 .* x).
 Proof.
-rewrite !gradeE; intros (Hx, (l, (H1l, H2l))).
+intros (Hx, (l, (H1l, H2l))).
 destruct l as [| y l].
-rewrite H1l; simpl joinl; rewrite scalE0r, <-gradeE, grade0; auto.
+rewrite H1l; simpl joinl; rewrite scalE0r; auto.
+now apply grade0.
 split; auto.
 exists (k2 .* y :: l); repeat split; auto.
 rewrite H1l; destruct l as [|z l]; auto.
@@ -3591,7 +3566,6 @@ Qed.
 Lemma grade_join n k1 k2 x y :
    grade n k1 x -> grade n k2 y -> grade n (k1 + k2) (x ∨ y).
 Proof.
-rewrite !gradeE.
 intros (Hx, (l1, (H1l1, H2l1))) (Hy, (l2, (H1l2, H2l2))).
 split; auto.
 destruct l1 as [|x1 l1].
@@ -3630,18 +3604,18 @@ Qed.
 Lemma dual_hom n k v : hom n k v -> hom n (n - k) '@v.
 Proof.
 case (Lt.le_or_lt k n).
-2: intros Hi Hh; rewrite (hom_lt _ _ _ Hi Hh), dual0, homk0; auto.
+2: intros Hi Hh; rewrite (hom_lt _ _ _ Hi Hh), dual0.
+2: now apply homk0.
 generalize k v; induction n as  [| n IH]; simpl; auto; clear k v.
-intros [| k] (x,y) H; rewrite !andbP; intros (H1,H2).
+intros [| k] (x,y) H; intros (H1,H2).
 split; try apply conj_hom.
 pattern n at 2; replace n with (n - 0)%nat; auto with arith.
-generalize H1; case eq0_spec; intros; [subst | discriminate].
-rewrite dual0, homk0; auto.
+now rewrite H1, dual0; apply homk0; auto.
 assert (H3: k <= n); auto with arith.
 generalize (Minus.le_plus_minus _ _ H3).
 case (n - k)%nat.
 rewrite Plus.plus_0_r; intros; subst.
-rewrite (hom_lt k k.+1 y), conj0, dual0, eq0I; auto with arith.
+rewrite (hom_lt k k.+1 y), conj0, dual0; auto with arith.
 split; auto.
 replace 0%nat with (k - k)%nat; auto with arith.
 intros n1 Hn1; split; try apply conj_hom.
@@ -3672,13 +3646,13 @@ Proof.
 generalize k; clear k.
 induction n as [| n IH]; simpl; try Vfold n.
 intros [| k]; auto; Krm1.
-case eqK_spec; intros; subst; Vrm0; try discriminate.
+intros; subst; Vrm0.
 intros [|k]; destruct v.
-rewrite andbP; case eq0_spec; intros H1 (H2,H3); subst; try discriminate.
+intros (->, H1).
 rewrite !dual0, conj0; Vrm0.
-rewrite (conjf_hom _ _ _ H3), !dual_scal, (IH _ _ H3).
+rewrite (conjf_hom _ _ _ H1), !dual_scal, (IH _ _ H1).
 simpl expK; rewrite !scalE1, dual0; auto.
-rewrite andbP; intros (H1,H2).
+intros (H1,H2).
 rewrite (conjf_hom _ _ _ H2), !dual_scal, (IH _ _ H2).
 assert (H3:= dual_hom _ _ _ H1).
 rewrite (conjf_hom _ _ _ H3), dual_scal, (IH _ _ H1).
@@ -3860,11 +3834,11 @@ Proof.
 generalize k; clear k.
 induction n as [| n IH];simpl; auto; try Vfold n.
 intros [|k] H; simpl; Krm1.
-generalize H; case eqK_spec; intros; subst; Grm0; discriminate.
-intros [| k]; destruct M; rewrite andbP; intros (HM1, HM2);
+intros; subst; Grm0; discriminate.
+intros [| k]; destruct M; intros (HM1, HM2);
   rewrite dconjt; simpl; Vfold n; Krm1.
-generalize HM1; case eq0_spec; try (intros; discriminate); auto.
-intros H1; rewrite H1, (IH _ _ HM2); simpl; Vfold n; Krm1.
+subst.
+rewrite (IH _ _ HM2); simpl; Vfold n; Krm1.
 rewrite dconj0, Plus.plus_0_r, <-scal_multE; Krm1; Vrm0.
 rewrite IH with (1 := HM1),IH with (1 := HM2); auto.
 rewrite <-scal_multE, <-plus_n_Sm; simpl expK; Krm1.
@@ -3909,11 +3883,9 @@ Proof.
 generalize b k; clear b k.
 induction n as [| n IH]; simpl.
   intros [|] [|k]; auto.
-  case eqK_spec; auto; intros HH HH1; try discriminate.
-  rewrite HH, oppK0, eqKI; auto.
-intros b [|k]; destruct x; rewrite !andbP; intros (H1, H2); split; auto.
-generalize H1; case eq0_spec; intros Hx1 HH; try discriminate.
-  rewrite Hx1, dconj0, eq0I; auto.
+  now intros HH; rewrite HH, oppK0.
+intros b [|k]; destruct x; intros (H1, H2); split; auto.
+rewrite H1, dconj0; auto.
 Qed.
 
 Hint Resolve dconj_hom : core.
@@ -4031,7 +4003,7 @@ Lemma homn_all n x : hom n n x -> x = 'dC[x] .* E.
 Proof.
 unfold dconst.
 induction n as [|n IH]; simpl; try Vfold n; Krm1.
-destruct x; rewrite andbP; intros (Hx1,Hx2).
+destruct x; intros (Hx1,Hx2).
 rewrite <-(IH _ Hx1); Grm0.
 rewrite hom_lt with (2 := Hx2); Grm0.
 Qed.
@@ -4247,16 +4219,13 @@ generalize k1 k2; clear k1 k2.
 induction n as [| n IH]; simpl; try Vfold n.
 intros k1 k2 _ _ HH; contradict HH; auto with arith.
 intros [|k1] [|k2]; destruct x as [x1 x2]; destruct y as [y1 y2].
-case eq0_spec; auto; intros HH Hx2; subst; try discriminate.
-case eq0_spec; auto; intros HH Hy; subst; try discriminate.
-Grm0.
-case eq0_spec; auto; intros HH Hx2; subst; try discriminate.
-rewrite andbP; intros (Hy1,Hy2) H; rewrite (IH x2 _ 0%nat k2); Grm0.
+now intros (->, Hx2) (->, Hy2) _; Grm0.
+intros (->, Hx2) (Hy1, Hy2) H; Grm0.
+rewrite (IH x2 _ 0%nat k2); Grm0.
 auto with arith.
-rewrite andbP; intros (Hx1,Hx2).
-case eq0_spec; auto; intros HH Hy2 H; subst; try discriminate.
+intros (Hx1, Hx2) (->, Hy2) H.
 rewrite (IH x1 y2 k1 0%nat); Grm0; auto with arith.
-rewrite !andbP; intros (Hx1,Hx2) (Hy1,H2) H.
+intros (Hx1,Hx2) (Hy1,H2) H.
 rewrite (IH _ _ k1 k2), (IH _ _ k1 k2.+1), (IH _ _ k1.+1 k2); 
       Grm0; auto with arith.
 rewrite <-plus_n_Sm in H; auto with arith.
@@ -4393,7 +4362,7 @@ Lemma join01E n x y : hom n 1 x -> hom n 1 y ->
    x ∨ y = 0 -> exists k, x = k .* y \/ y = k .* x.
 Proof.
 intros H1 H2 H3.
-case (eqE_spec _ (fn n) y 0); intros Hy; subst.
+case (eqE_dec _ (fn n) y 0); intros Hy; subst.
 exists 0%f; Grm0.
 rewrite <-cbl1_hom1_equiv in H1.
 rewrite (decomp_cbl n y (y::nil) x H1 (hom1_decomposable _ _ H2) Hy) in H3.
@@ -4409,17 +4378,16 @@ induction n as [|n IH]; simpl; try Vfold n.
 intros [|k1] [|k2]; Krm1.
 intros [|k1] [|k2]; destruct x as [x1 x2]; destruct y as [y1 y2].
 intros; discriminate.
-case eq0_spec; intros HH Hx2; subst; try discriminate.
+intros (->, Hx2) (Hy1, Hy2) H.
 rewrite !meet0l; Grm0.
-rewrite andbP; intros (Hy1,Hy2) HH; injection HH; intros HH1; subst.
+rewrite <-(IH _ _ 0%nat k2); auto.
 rewrite dconjf_hom with (1 := Hy1), conjf_hom with (1 := Hx2).
-rewrite expK_add, expK2m1; simpl expK; auto.
-rewrite !scalE1, (IH _ _ 0%nat k2); auto.
-rewrite andbP; intros (Hx1,Hx2).
-case eq0_spec; intros HH Hy2; subst; try discriminate.
-intros HH; injection HH; intros HH1; subst.
-rewrite dconj0, !meet0r, IH with (1 := Hx1) (2 := Hy2); Grm0.
-rewrite !andbP; intros (Hx1,Hx2)( Hy1,Hy2) Hn; Grm0.
+simpl; Vfold n; rewrite scalE1; auto.
+inversion H; subst.
+now rewrite expK_add, expK2m1, scalE1.
+intros (Hx1,Hx2) (->, Hy2) H; Grm0.
+rewrite IH with (1 := Hx1) (2 := Hy2); auto.
+intros (Hx1,Hx2)( Hy1,Hy2) Hn; Grm0.
 injection Hn; rewrite <-plus_n_Sm; clear Hn; intros Hn; subst.
 rewrite meet_small with (1:= Hx1) (2 := Hy1); auto with arith.
 rewrite (IH _ _ k1 k2.+1), (IH _ _ k1.+1 k2),
@@ -4470,13 +4438,11 @@ Lemma splitlr n k1 k2 x y z : hom n k1 x -> hom n 1 y ->  hom n k2 z ->
 Proof.
 generalize k1 k2; clear k1 k2.
 induction n as [| n IH]; simpl; try Vfold n.
-intros [|k1] [|k2]; 
-  case eqK_spec; intros; subst; Krm0; try discriminate.
+intros [|k1] [|k2];
+   intros; subst; Krm0.
 intros [|k1] [|k2]; destruct x as [x1 x2]; destruct y as [y1 y2];
   destruct z as [z1 z2].
-case eq0_spec; intros tmp Hx2; subst; try discriminate.
-rewrite andbP; intros (Hy1, Hy2).
-case eq0_spec; intros tmp Hz2; subst; try discriminate.
+intros [-> Hx2] [Hy1 Hy2] [-> Hz2].
 Grm0.
 rewrite (hom0E _ _ Hx2), (hom0E _ _ Hy1), (hom0E _ _ Hz2),
         conjk; auto.
@@ -4485,8 +4451,7 @@ case (Peano_dec.dec_eq_nat n 0); intros Hn; subst; auto.
 simpl; Krm1; rewrite !multK_assoc, multK_com, !multK_assoc; auto.
 rewrite !meet_small with (k1 := 0%nat) (k2 := 0%nat); Grm0;
   try apply scal_hom; try apply hom0K; try (destruct n; auto with arith; fail).
-case eq0_spec; intros tmp Hx2; subst; try discriminate.
-rewrite !andbP; intros (Hy1, Hy2) (Hz1, Hz2).
+intros [-> Hx2] [Hy1 Hy2] [Hz1 Hz2]; Grm0.
 rewrite (IH x2 y2 (z1^d_'f) 0%nat k2); auto.
 rewrite (hom0E _ _ Hx2), (hom0E _ _ Hy1), conjk; auto.
 Grm0.
@@ -4505,8 +4470,7 @@ replace (n + (0 + k2.+1).+1 + (n + k2.+1))%nat with (2 * (n + k2.+1) + 1)%nat by
 rewrite expKm1_2E; simpl expK; Krm1; rewrite scalE1; auto.
 rewrite dconjf_joinr, conj_invo; auto.
 rewrite <-!plus_n_Sm; simpl expK; Krm1.
-case eq0_spec; intros tmp; subst; try (intros; discriminate).
-rewrite andbP, andbP; intros (Hx1, Hx2) (Hy1, Hy2) Hz2.
+intros (Hx1, Hx2) (Hy1, Hy2) (->, Hz2).
 rewrite dconj0, !meet0r; Grm0.
 apply f_equal2 with (f := @pair _ _).
 rewrite (hom0E _ _ Hy1), (hom0E _ _ Hz2), !joinkr; auto.
@@ -4531,7 +4495,7 @@ rewrite multK_assoc, multK_com with (x := 'C[z2]), <- multK_assoc; auto.
 Krm1; rewrite !opp_multKl, <-expKS, <-expK_add; auto.
 replace ((n + (k1.+1 + 0).+1).+1 + n)%nat with (2 * (n.+1) + k1.+1)%nat by ring.
 rewrite expKm1_2E; auto.
-rewrite !andbP; intros (Hx1,Hx2) (Hy1,Hy2) (Hz1,Hz2).
+intros (Hx1,Hx2) (Hy1,Hy2) (Hz1,Hz2).
 apply f_equal2 with (f := @pair _ _).
 rewrite meet_addl.
 rewrite IH with (1 := Hx1) (3 := Hz1); auto.
@@ -4725,18 +4689,18 @@ assert (dual_aux_rec: forall n x l, hom n 1 x -> is_vector_space n l ->
  '@x ∧ joinl n l = 0  \/ (exists y, In y l /\ '@x ∧ y <> 0)).
 intros n1 x1 l H1 H2.
 case (list_dec _ (fun y => '@x1 ∧ y = 0) l); auto.
-intros y; case (eqE_spec _ (fn n1) ('@x1 ∧ y) 0); auto.
+intros y; case (eqE_dec _ (fn n1) ('@x1 ∧ y) 0); auto.
 generalize x; clear x.
 induction k as [|k IH]; auto.
 intros x Hn Hx; rewrite (grade0E _ _ Hx); Grm0.
 apply grade0.
-intros x Hn; rewrite !gradeE; intros (Hx, ([|a l], (H1l,H2l))); 
+intros x Hn; intros (Hx, ([|a l], (H1l,H2l))); 
   subst; try discriminate; split; auto.
 exists nil; split; Grm0.
 assert (Hn1: 0 < n)
    by (destruct n; auto with arith; contradict Hn; auto with arith).
 assert (Ha: hom n 1 a); auto with datatypes.
-case (eqE_spec _ (fn n) (joinl n (a :: l)) 0); intros Hal.
+case (eqE_dec _ (fn n) (joinl n (a :: l)) 0); intros Hal.
 rewrite Hal; exists nil; split; Grm0; intros y [].
 case (homE _  _ (length (a::l)) _ Hx).
 apply joinl_hom1; auto.
@@ -4751,11 +4715,11 @@ split.
 intros u Hu; constructor; auto.
 rewrite joinl_all, meet_allr; auto with arith.
 assert (F1: grade n k  (joinl n (v::l))).
-rewrite gradeE; split.
+split.
 rewrite Hk; apply joinl_hom1; auto with datatypes.
 exists (v::l); split; auto with datatypes.
 assert (F2: k < n); auto with arith.
-generalize (IH _ F2 F1); rewrite gradeE; intros (_,(l1,(H1l1,H2l1))).
+generalize (IH _ F2 F1); intros (_,(l1,(H1l1,H2l1))).
 exists l1; split.
 intros u Hu; red; rewrite cbl1_hom1_equiv; auto with datatypes.
 rewrite joinlS, dual_join, H1l1; auto.
@@ -4873,7 +4837,7 @@ case (Lt.le_lt_or_eq _ _ Hk2); intros H1k2; subst.
 2: apply grade_scal; rewrite Plus.plus_comm, Minus.minus_plus; auto with arith.
 replace (k1 + k2 - n)%nat with (n - ((n - k1) + (n - k2)))%nat; auto.
 assert (F1: hom n (k1 + k2 - n) (x ∧ y)) by
-  (rewrite gradeE in Hx, Hy; case Hx; case Hy; auto).
+  (case Hx; case Hy; auto).
 rewrite dual_invoE with (1 := F1).
 apply grade_scal.
 rewrite dual_meet.
@@ -4939,18 +4903,16 @@ Qed.
 Lemma k2g_hom n x : hom n 1 ('v_x).
 Proof.
 induction n as [|n IH]; Krm0.
-simpl; rewrite eqKI; auto.
-destruct x as [k x]; simpl.
-rewrite  hom0K; apply (IH x).
+now simpl.
+now destruct x as [k x]; simpl.
 Qed.
 
 Lemma hom1E n x : hom n 1 x -> exists y, x = 'v_y.
 Proof.
 induction n as [|n IH]; simpl; Krm0.
-case eqK_spec; auto; intros; subst; try discriminate.
-exists tt; auto.
+intros; subst; exists tt; auto.
 destruct x as [x1 x2].
-rewrite andbP; intros (Hx1, Hx2).
+intros (Hx1, Hx2).
 case (IH _ Hx2); intros y Hy.
 exists ('C[x1], y).
 rewrite <-(hom0E _ _ Hx1), <-Hy; auto.
@@ -4994,8 +4956,6 @@ Definition V0 := genk (dim p) 0.
 (* This is 1 *)
 Definition V1 := genk (dim p) 1.
 Definition Vect := vect p.
-(* This is the equality for our vectors *)
-Definition Veq: Vect -> Vect -> bool := eq p.
 (* This is the addition for our vectors *)
 Definition Vadd: Vect -> Vect -> Vect := add p.
 (* This is the multiplication for our vectors *)
@@ -5010,11 +4970,10 @@ Definition Vjoin: Vect -> Vect -> Vect := join (dim p).
 Definition Vmeet: Vect -> Vect -> Vect := meet (dim p).
 Definition Vcontra: Kn -> Vect -> Vect := contra (dim p).
 Definition Vdual: Vect -> Vect := dual (dim p).
-Definition Vdecompose: Vect -> option (list Vect) := decompose (dim p).
 Definition K2G: Kn -> Vect  := k2g p.
 
 Definition v_eparams :=
-  Build_eparams Vect K V0 Veq Vadd Vscal.
+  Build_eparams Vect K V0 Vadd Vscal.
 
 Definition f: vparamsProp (Kn.v_eparams p) := (Kn.fn p Hp p).
 
@@ -5035,7 +4994,6 @@ Definition Qparams (n:nat) := Build_params
   Q 
   0%Q
   1%Q
- Qeq_bool
  Qopp
  Qplus
  Qmult
@@ -5101,13 +5059,6 @@ Eval vm_compute in '@((X∨Y)∧ ( Z)).
 Eval vm_compute in (X + Y) ∨ '@(X + Y).
 
 
-Eval vm_compute in Vdecompose p ((X ∨ Y) ∧ (Y ∨ Z)).
-
-Eval vm_compute in Vdecompose p ((X + Y) ∨ (X + Z)).
-
-Eval vm_compute in Vdecompose p ((X + Y + Z) ∨ (X + Z) ∨ (X + Y)).
-
-Eval vm_compute in Vdecompose p ((X + Y) ∨ (Y + Z)).
 
 Eval vm_compute in (X + Y) ∨ (X + Z) + 
   (-1#1)%Q .* (((-1#1)%Q .* Y + Z) ∨ ((-1#1)%Q .* (X + Y))).
