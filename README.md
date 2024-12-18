@@ -6,8 +6,8 @@ Follow the instructions on https://github.com/coq-community/templates to regener
 
 [![Docker CI][docker-action-shield]][docker-action-link]
 
-[docker-action-shield]: https://github.com/thery/GeometricAlgebra/workflows/Docker%20CI/badge.svg?branch=master
-[docker-action-link]: https://github.com/thery/GeometricAlgebra/actions?query=workflow:"Docker%20CI"
+[docker-action-shield]: https://github.com/thery/GeometricAlgebra/actions/workflows/docker-action.yml/badge.svg?branch=master
+[docker-action-link]: https://github.com/thery/GeometricAlgebra/actions/workflows/docker-action.yml
 
 
 
@@ -32,7 +32,7 @@ This is the content of the old Readme:
 - Author(s):
   - Laurent Théry
 - License: [MIT License](LICENSE)
-- Compatible Coq versions: 8.17 or later
+- Compatible Coq versions: 8.19 or later
 - Additional dependencies: none
 - Coq namespace: `GeometricAlgebra`
 - Related publication(s): none
