@@ -14,7 +14,7 @@ Follow the instructions on https://github.com/coq-community/templates to regener
 
 This is an update of the original project 
   [GeometricAlgebra](http://www-sop.inria.fr/marelle/GeometricAlgebra/).
-The project should now be compatible with Coq 8.17.0.
+The project should now be compatible with Coq 8.19.2
 
 Simply run `make` to compile the relevant files.
 
