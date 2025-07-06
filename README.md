@@ -14,7 +14,7 @@ Follow the instructions on https://github.com/coq-community/templates to regener
 
 This is an update of the original project 
   [GeometricAlgebra](http://www-sop.inria.fr/marelle/GeometricAlgebra/).
-The project should now be compatible with Coq 8.19.2
+The project should now be compatible with Rocq 9.0
 
 Simply run `make` to compile the relevant files.
 
@@ -32,9 +32,9 @@ This is the content of the old Readme:
 - Author(s):
   - Laurent Théry
 - License: [MIT License](LICENSE)
-- Compatible Coq versions: 8.19 or later
+- Compatible Rocq/Coq versions: 9.0 or later
 - Additional dependencies: none
-- Coq namespace: `GeometricAlgebra`
+- Rocq/Coq namespace: `GeometricAlgebra`
 - Related publication(s): none
 
 ## Building and installation instructions
