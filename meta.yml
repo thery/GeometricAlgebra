@@ -42,8 +42,7 @@ supported_rocq_versions:
   opam: '{(>= "9.1")}'
 
 tested_rocq_opam_versions:
-- version: '2.5.0-rocq-prover-9.1'
-  repo: 'mathcomp/mathcomp'
+- version: '9.1'
 
 namespace: GeometricAlgebra
 
